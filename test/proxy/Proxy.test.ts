@@ -4,7 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { deployProxy } from "../utils";
-import { DEPOSIT_AMOUNT, WITHDRAW_AMOUNT } from "../constants";
+import { DEPOSIT_AMOUNT, IMPLEMENTATION_SLOT, WITHDRAW_AMOUNT } from "../constants";
 
 describe("Proxy", function () {
 	let proxy: Proxy;
@@ -16,9 +16,20 @@ describe("Proxy", function () {
 		({ user, vaultV1, proxy, vault } = await loadFixture(deployProxy));
 	});
 
+	const getAddressFromSlot = async (slot: string) => {
+		const value = await ethers.provider.getStorage(proxy.target, slot);
+		return ethers.getAddress(ethers.dataSlice(value, 12));
+	};
+
 	describe("Deployment", function () {
 		it("Should set the implementation", async function () {
 			expect(await proxy.implementation()).to.eq(vaultV1.target);
+		});
+
+		it("Should store the implementation in eip1967 slot", async function () {
+			await vault.connect(user).deposit({ value: DEPOSIT_AMOUNT });
+
+			expect(await getAddressFromSlot(IMPLEMENTATION_SLOT)).to.eq(vaultV1.target);
 		});
 	});
 

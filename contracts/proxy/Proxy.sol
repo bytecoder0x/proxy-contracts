@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
+import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
+
 contract Proxy {
     error ImplementationIsNotContract();
 
-    address public implementation;
+    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
 
     constructor(address _implementation) {
         if (_implementation.code.length == 0) revert ImplementationIsNotContract();
 
-        implementation = _implementation;
+        StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
     }
 
     fallback() external payable {
-        _delegate(implementation);
+        _delegate(implementation());
     }
 
     receive() external payable {
-        _delegate(implementation);
+        _delegate(implementation());
+    }
+
+    function implementation() public view returns (address) {
+        return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
     }
 
     function _delegate(address _implementation) private {
