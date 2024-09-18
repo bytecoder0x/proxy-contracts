@@ -4,16 +4,19 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { deployProxy } from "../utils";
-import { DEPOSIT_AMOUNT, IMPLEMENTATION_SLOT, WITHDRAW_AMOUNT } from "../constants";
+import { ADMIN_SLOT, DEPOSIT_AMOUNT, IMPLEMENTATION_SLOT, WITHDRAW_AMOUNT } from "../constants";
 
 describe("Proxy", function () {
 	let proxy: Proxy;
 	let vault: VaultV1;
 	let vaultV1: VaultV1;
+	let newVaultV1: VaultV1;
+	let admin: HardhatEthersSigner;
 	let user: HardhatEthersSigner;
+	let otherUser: HardhatEthersSigner;
 
 	beforeEach(async () => {
-		({ user, vaultV1, proxy, vault } = await loadFixture(deployProxy));
+		({ admin, user, otherUser, vaultV1, newVaultV1, proxy, vault } = await loadFixture(deployProxy));
 	});
 
 	const getAddressFromSlot = async (slot: string) => {
@@ -26,10 +29,13 @@ describe("Proxy", function () {
 			expect(await proxy.implementation()).to.eq(vaultV1.target);
 		});
 
-		it("Should store the implementation in eip1967 slot", async function () {
-			await vault.connect(user).deposit({ value: DEPOSIT_AMOUNT });
+		it("Should set the admin", async function () {
+			expect(await proxy.admin()).to.eq(admin.address);
+		});
 
+		it("Should store the implementation and the admin in eip1967 slots", async function () {
 			expect(await getAddressFromSlot(IMPLEMENTATION_SLOT)).to.eq(vaultV1.target);
+			expect(await getAddressFromSlot(ADMIN_SLOT)).to.eq(admin.address);
 		});
 	});
 
@@ -63,6 +69,41 @@ describe("Proxy", function () {
 
 		it("Should prevent deposit of zero amount", async function () {
 			await expect(vault.connect(user).deposit({ value: 0 })).to.be.revertedWithCustomError(vault, "AmountIsZero");
+		});
+	});
+
+	describe("Upgrade", function () {
+		it("Should allow admin to change the implementation", async function () {
+			await proxy.connect(admin).upgradeTo(newVaultV1.target);
+
+			expect(await proxy.implementation()).to.eq(newVaultV1.target);
+		});
+
+		it("Should prevent upgrade if it is not called by the admin", async function () {
+			await expect(proxy.connect(user).upgradeTo(newVaultV1.target)).to.be.revertedWithCustomError(
+				proxy,
+				"OnlyAdminAllowed"
+			);
+		});
+
+		it("Should allow the new admin to upgrade and prevent the old one", async function () {
+			await proxy.connect(admin).changeAdmin(otherUser.address);
+			expect(await proxy.admin()).to.eq(otherUser.address);
+
+			await expect(proxy.connect(admin).upgradeTo(newVaultV1.target)).to.be.revertedWithCustomError(
+				proxy,
+				"OnlyAdminAllowed"
+			);
+
+			await proxy.connect(otherUser).upgradeTo(newVaultV1.target);
+			expect(await proxy.implementation()).to.eq(newVaultV1.target);
+		});
+
+		it("Should prevent change admin if it is not called by the admin", async function () {
+			await expect(proxy.connect(user).changeAdmin(user.address)).to.be.revertedWithCustomError(
+				proxy,
+				"OnlyAdminAllowed"
+			);
 		});
 	});
 });
