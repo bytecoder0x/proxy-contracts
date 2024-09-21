@@ -1,4 +1,5 @@
 import { ethers } from "hardhat";
+import { DEPOSIT_AMOUNT } from "./constants";
 
 export const deployProxy = async () => {
     const [admin, owner, user, otherUser] = await ethers.getSigners();
@@ -10,6 +11,10 @@ export const deployProxy = async () => {
     const newVaultV1 = await VaultV1Factory.deploy();
     await newVaultV1.waitForDeployment();
 
+    const VaultV2Factory = await ethers.getContractFactory("VaultV2");
+    const vaultV2 = await VaultV2Factory.deploy();
+    await vaultV2.waitForDeployment();
+
     const ProxyFactory = await ethers.getContractFactory("Proxy");
     const proxy = await ProxyFactory.deploy(vaultV1.target, admin.address);
     await proxy.waitForDeployment();
@@ -17,5 +22,16 @@ export const deployProxy = async () => {
     const vault = await ethers.getContractAt("VaultV1", proxy.target);
     await vault.initialize(owner.address);
 
-    return { admin, owner, user, otherUser, vaultV1, newVaultV1, proxy, vault };
+    return { admin, owner, user, otherUser, vaultV1, newVaultV1, vaultV2, proxy, vault };
+};
+
+export const deployUpgradedVault = async () => {
+    const { admin, owner, user, otherUser, vaultV2, proxy, vault } = await deployProxy();
+
+    await vault.connect(user).deposit({ value: DEPOSIT_AMOUNT });
+    await proxy.connect(admin).upgradeTo(vaultV2.target);
+
+    const upgradedVault = await ethers.getContractAt("VaultV2", proxy.target);
+
+    return { admin, owner, user, otherUser, vaultV2, proxy, upgradedVault };
 };
