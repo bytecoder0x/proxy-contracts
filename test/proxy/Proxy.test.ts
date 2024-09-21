@@ -12,11 +12,12 @@ describe("Proxy", function () {
 	let vaultV1: VaultV1;
 	let newVaultV1: VaultV1;
 	let admin: HardhatEthersSigner;
+	let owner: HardhatEthersSigner;
 	let user: HardhatEthersSigner;
 	let otherUser: HardhatEthersSigner;
 
 	beforeEach(async () => {
-		({ admin, user, otherUser, vaultV1, newVaultV1, proxy, vault } = await loadFixture(deployProxy));
+		({ admin, owner, user, otherUser, vaultV1, newVaultV1, proxy, vault } = await loadFixture(deployProxy));
 	});
 
 	const getAddressFromSlot = async (slot: string) => {
@@ -40,6 +41,11 @@ describe("Proxy", function () {
 	});
 
 	describe("Calls through the proxy", function () {
+		it("Should set the owner of the vault", async function () {
+			expect(await vault.owner()).to.eq(owner.address);
+			expect(await vaultV1.owner()).to.eq(ethers.ZeroAddress);
+		});
+
 		it("Should deposit through the proxy", async function () {
 			const tx = await vault.connect(user).deposit({ value: DEPOSIT_AMOUNT });
 

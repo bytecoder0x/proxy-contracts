@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
-contract VaultV1 {
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
+contract VaultV1 is Initializable {
     error OwnerIsZeroAddress();
     error AmountIsZero();
     error InsufficientBalance();
@@ -15,7 +17,11 @@ contract VaultV1 {
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
 
-    constructor(address _owner) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _owner) external initializer {
         if (_owner == address(0)) revert OwnerIsZeroAddress();
 
         owner = _owner;
