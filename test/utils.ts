@@ -15,12 +15,13 @@ export const deployProxy = async () => {
     const vaultV2 = await VaultV2Factory.deploy();
     await vaultV2.waitForDeployment();
 
+    const initData = vaultV1.interface.encodeFunctionData("initialize", [owner.address]);
+
     const ProxyFactory = await ethers.getContractFactory("Proxy");
-    const proxy = await ProxyFactory.deploy(vaultV1.target, admin.address);
+    const proxy = await ProxyFactory.deploy(vaultV1.target, admin.address, initData);
     await proxy.waitForDeployment();
 
     const vault = await ethers.getContractAt("VaultV1", proxy.target);
-    await vault.initialize(owner.address);
 
     return { admin, owner, user, otherUser, vaultV1, newVaultV1, vaultV2, proxy, vault };
 };

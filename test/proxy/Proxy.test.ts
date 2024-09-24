@@ -1,4 +1,4 @@
-import { Proxy, VaultV1 } from "../../typechain-types";
+import { Proxy, VaultV1, VaultV2 } from "../../typechain-types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
@@ -11,13 +11,14 @@ describe("Proxy", function () {
 	let vault: VaultV1;
 	let vaultV1: VaultV1;
 	let newVaultV1: VaultV1;
+	let vaultV2: VaultV2;
 	let admin: HardhatEthersSigner;
 	let owner: HardhatEthersSigner;
 	let user: HardhatEthersSigner;
 	let otherUser: HardhatEthersSigner;
 
 	beforeEach(async () => {
-		({ admin, owner, user, otherUser, vaultV1, newVaultV1, proxy, vault } = await loadFixture(deployProxy));
+		({ admin, owner, user, otherUser, vaultV1, newVaultV1, vaultV2, proxy, vault } = await loadFixture(deployProxy));
 	});
 
 	const getAddressFromSlot = async (slot: string) => {
@@ -113,6 +114,40 @@ describe("Proxy", function () {
 				proxy,
 				"OnlyAdminAllowed"
 			);
+		});
+	});
+
+	describe("Upgrade with call", function () {
+		it("Should upgrade and call the new implementation", async function () {
+			const data = vaultV2.interface.encodeFunctionData("deposit");
+
+			await proxy.connect(admin).upgradeToAndCall(vaultV2.target, data, { value: DEPOSIT_AMOUNT });
+
+			const upgradedVault = await ethers.getContractAt("VaultV2", proxy.target);
+
+			expect(await proxy.implementation()).to.eq(vaultV2.target);
+			expect(await upgradedVault.balances(admin.address)).to.eq(DEPOSIT_AMOUNT);
+			expect(await upgradedVault.version()).to.eq(2);
+		});
+
+		it("Should prevent upgrade with call if it is not called by the admin", async function () {
+			const data = vaultV2.interface.encodeFunctionData("deposit");
+
+			await expect(proxy.connect(user).upgradeToAndCall(vaultV2.target, data)).to.be.revertedWithCustomError(
+				proxy,
+				"OnlyAdminAllowed"
+			);
+		});
+
+		it("Should revert if the call to the new implementation fails", async function () {
+			// vault is already initialized in the fixture
+			const data = vaultV2.interface.encodeFunctionData("initialize", [owner.address]);
+
+			await expect(proxy.upgradeToAndCall(vaultV2.target, data)).to.be.revertedWithCustomError(
+				proxy,
+				"DelegateCallFailed"
+			);
+			expect(await proxy.implementation()).to.eq(vaultV1.target);
 		});
 	});
 });

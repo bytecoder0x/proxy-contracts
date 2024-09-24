@@ -7,6 +7,7 @@ contract Proxy {
     error ImplementationIsNotContract();
     error AdminIsZeroAddress();
     error OnlyAdminAllowed();
+    error DelegateCallFailed();
 
     bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
@@ -14,9 +15,11 @@ contract Proxy {
     event Upgraded(address indexed implementation);
     event AdminChanged(address previousAdmin, address newAdmin);
 
-    constructor(address _implementation, address _admin) {
+    constructor(address _implementation, address _admin, bytes memory _data) {
         _setImplementation(_implementation);
         _setAdmin(_admin);
+
+        if (_data.length > 0) _callImplementation(_data);
     }
 
     modifier onlyAdmin() {
@@ -34,6 +37,11 @@ contract Proxy {
 
     function upgradeTo(address _implementation) external onlyAdmin {
         _setImplementation(_implementation);
+    }
+
+    function upgradeToAndCall(address _implementation, bytes calldata _data) external payable onlyAdmin {
+        _setImplementation(_implementation);
+        _callImplementation(_data);
     }
 
     function changeAdmin(address _admin) external onlyAdmin {
@@ -60,6 +68,11 @@ contract Proxy {
 
         emit AdminChanged(admin(), _admin);
         StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
+    }
+
+    function _callImplementation(bytes memory _data) private {
+        (bool success, ) = implementation().delegatecall(_data);
+        if (!success) revert DelegateCallFailed();
     }
 
     function _delegate(address _implementation) private {
