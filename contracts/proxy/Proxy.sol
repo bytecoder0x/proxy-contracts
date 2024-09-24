@@ -11,6 +11,9 @@ contract Proxy {
     bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
 
+    event Upgraded(address indexed implementation);
+    event AdminChanged(address previousAdmin, address newAdmin);
+
     constructor(address _implementation, address _admin) {
         _setImplementation(_implementation);
         _setAdmin(_admin);
@@ -49,11 +52,13 @@ contract Proxy {
         if (_implementation.code.length == 0) revert ImplementationIsNotContract();
 
         StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
+        emit Upgraded(_implementation);
     }
 
     function _setAdmin(address _admin) private {
         if (_admin == address(0)) revert AdminIsZeroAddress();
 
+        emit AdminChanged(admin(), _admin);
         StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
     }
 

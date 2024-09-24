@@ -80,8 +80,9 @@ describe("Proxy", function () {
 
 	describe("Upgrade", function () {
 		it("Should allow admin to change the implementation", async function () {
-			await proxy.connect(admin).upgradeTo(newVaultV1.target);
+			const tx = await proxy.connect(admin).upgradeTo(newVaultV1.target);
 
+			await expect(tx).to.emit(proxy, "Upgraded").withArgs(newVaultV1.target);
 			expect(await proxy.implementation()).to.eq(newVaultV1.target);
 		});
 
@@ -93,7 +94,9 @@ describe("Proxy", function () {
 		});
 
 		it("Should allow the new admin to upgrade and prevent the old one", async function () {
-			await proxy.connect(admin).changeAdmin(otherUser.address);
+			const tx = await proxy.connect(admin).changeAdmin(otherUser.address);
+
+			await expect(tx).to.emit(proxy, "AdminChanged").withArgs(admin.address, otherUser.address);
 			expect(await proxy.admin()).to.eq(otherUser.address);
 
 			await expect(proxy.connect(admin).upgradeTo(newVaultV1.target)).to.be.revertedWithCustomError(
