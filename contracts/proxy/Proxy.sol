@@ -2,18 +2,11 @@
 pragma solidity ^0.8.27;
 
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
+import {IProxy} from "../interfaces/proxy/IProxy.sol";
 
-contract Proxy {
-    error ImplementationIsNotContract();
-    error AdminIsZeroAddress();
-    error OnlyAdminAllowed();
-    error DelegateCallFailed();
-
+contract Proxy is IProxy {
     bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
-
-    event Upgraded(address indexed implementation);
-    event AdminChanged(address previousAdmin, address newAdmin);
 
     constructor(address _implementation, address _admin, bytes memory _data) {
         _setImplementation(_implementation);

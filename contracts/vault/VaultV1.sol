@@ -2,20 +2,13 @@
 pragma solidity ^0.8.27;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {IVault} from "../interfaces/vault/IVault.sol";
 
-contract VaultV1 is Initializable {
-    error OwnerIsZeroAddress();
-    error AmountIsZero();
-    error InsufficientBalance();
-    error TransferFailed();
-
+contract VaultV1 is Initializable, IVault {
     uint256 public totalDeposits;
     address public owner;
 
     mapping(address => uint256) public balances;
-
-    event Deposited(address indexed user, uint256 amount);
-    event Withdrawn(address indexed user, uint256 amount);
 
     constructor() {
         _disableInitializers();

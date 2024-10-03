@@ -2,15 +2,9 @@
 pragma solidity ^0.8.27;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {IVaultV2} from "../interfaces/vault/IVault.sol";
 
-contract VaultV2 is Initializable {
-    error OwnerIsZeroAddress();
-    error AmountIsZero();
-    error InsufficientBalance();
-    error TransferFailed();
-    error OnlyOwnerAllowed();
-    error ExceedsDepositLimit();
-
+contract VaultV2 is Initializable, IVaultV2 {
     uint256 public totalDeposits;
     address public owner;
 
@@ -18,10 +12,6 @@ contract VaultV2 is Initializable {
 
     // new variables only in the end, otherwise they overwrite the storage of V1
     uint256 public depositLimit;
-
-    event Deposited(address indexed user, uint256 amount);
-    event Withdrawn(address indexed user, uint256 amount);
-    event DepositLimitSet(uint256 limit);
 
     constructor() {
         _disableInitializers();
