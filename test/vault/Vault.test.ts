@@ -41,6 +41,22 @@ describe("Vault", function () {
 
             await expect(upgradedVault.version()).to.be.reverted;
         });
+
+        it("Should initialize V2 on a new proxy", async function () {
+            const ProxyFactory = await ethers.getContractFactory("Proxy");
+            const newProxy = await ProxyFactory.deploy(vaultV2.target, admin.address, "0x");
+            await newProxy.waitForDeployment();
+
+            const newVault = await ethers.getContractAt("VaultV2", newProxy.target);
+
+            await expect(newVault.initialize(ethers.ZeroAddress)).to.be.revertedWithCustomError(
+                newVault,
+                "OwnerIsZeroAddress"
+            );
+
+            await newVault.initialize(user.address);
+            expect(await newVault.owner()).to.eq(user.address);
+        });
     });
 
     describe("Vault V2", function () {
@@ -63,6 +79,41 @@ describe("Vault", function () {
             await expect(tx).to.emit(upgradedVault, "Withdrawn").withArgs(user.address, DEPOSIT_AMOUNT);
             expect(await upgradedVault.balances(user.address)).to.eq(0);
             expect(await upgradedVault.totalDeposits()).to.eq(0);
+        });
+
+        it("Should prevent withdraw more than balance", async function () {
+            await expect(upgradedVault.connect(user).withdraw(DEPOSIT_AMOUNT + 1n)).to.be.revertedWithCustomError(
+                upgradedVault,
+                "InsufficientBalance"
+            );
+            await expect(upgradedVault.connect(otherUser).withdraw(DEPOSIT_AMOUNT)).to.be.revertedWithCustomError(
+                upgradedVault,
+                "InsufficientBalance"
+            );
+        });
+
+        it("Should prevent deposit and withdraw of zero amount", async function () {
+            await expect(upgradedVault.connect(user).deposit({ value: 0 })).to.be.revertedWithCustomError(
+                upgradedVault,
+                "AmountIsZero"
+            );
+            await expect(upgradedVault.connect(user).withdraw(0)).to.be.revertedWithCustomError(
+                upgradedVault,
+                "AmountIsZero"
+            );
+        });
+
+        it("Should revert if the receiver does not accept ETH", async function () {
+            const MockReceiverFactory = await ethers.getContractFactory("MockReceiver");
+            const receiver = await MockReceiverFactory.deploy();
+            await receiver.waitForDeployment();
+
+            await receiver.deposit(proxy.target, { value: DEPOSIT_AMOUNT });
+
+            await expect(receiver.withdraw(proxy.target, DEPOSIT_AMOUNT)).to.be.revertedWithCustomError(
+                upgradedVault,
+                "TransferFailed"
+            );
         });
 
         it("Should set the deposit limit", async function () {
@@ -89,6 +140,28 @@ describe("Vault", function () {
             await expect(
                 upgradedVault.connect(otherUser).deposit({ value: DEPOSIT_LIMIT + 1n })
             ).to.be.revertedWithCustomError(upgradedVault, "ExceedsDepositLimit");
+        });
+
+        it("Should count the deposit from V1 in the limit", async function () {
+            await upgradedVault.connect(owner).setDepositLimit(DEPOSIT_LIMIT);
+
+            await expect(upgradedVault.connect(user).deposit({ value: DEPOSIT_LIMIT })).to.be.revertedWithCustomError(
+                upgradedVault,
+                "ExceedsDepositLimit"
+            );
+
+            await upgradedVault.connect(user).deposit({ value: DEPOSIT_LIMIT - DEPOSIT_AMOUNT });
+            expect(await upgradedVault.balances(user.address)).to.eq(DEPOSIT_LIMIT);
+        });
+
+        it("Should allow any deposit if the limit is zero", async function () {
+            const amount = ethers.parseEther("100");
+
+            await upgradedVault.connect(owner).setDepositLimit(DEPOSIT_LIMIT);
+            await upgradedVault.connect(owner).setDepositLimit(0);
+            await upgradedVault.connect(otherUser).deposit({ value: amount });
+
+            expect(await upgradedVault.balances(otherUser.address)).to.eq(amount);
         });
     });
 });

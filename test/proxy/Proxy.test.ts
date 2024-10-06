@@ -39,6 +39,24 @@ describe("Proxy", function () {
 			expect(await getAddressFromSlot(IMPLEMENTATION_SLOT)).to.eq(vaultV1.target);
 			expect(await getAddressFromSlot(ADMIN_SLOT)).to.eq(admin.address);
 		});
+
+		it("Should prevent deploy if implementation is not a contract", async function () {
+			const ProxyFactory = await ethers.getContractFactory("Proxy");
+
+			await expect(ProxyFactory.deploy(user.address, admin.address, "0x")).to.be.revertedWithCustomError(
+				ProxyFactory,
+				"ImplementationIsNotContract"
+			);
+		});
+
+		it("Should prevent deploy with zero admin address", async function () {
+			const ProxyFactory = await ethers.getContractFactory("Proxy");
+
+			await expect(ProxyFactory.deploy(vaultV1.target, ethers.ZeroAddress, "0x")).to.be.revertedWithCustomError(
+				ProxyFactory,
+				"AdminIsZeroAddress"
+			);
+		});
 	});
 
 	describe("Calls through the proxy", function () {
@@ -77,6 +95,54 @@ describe("Proxy", function () {
 		it("Should prevent deposit of zero amount", async function () {
 			await expect(vault.connect(user).deposit({ value: 0 })).to.be.revertedWithCustomError(vault, "AmountIsZero");
 		});
+
+		it("Should prevent withdraw of zero amount or more than balance", async function () {
+			await vault.connect(user).deposit({ value: DEPOSIT_AMOUNT });
+
+			await expect(vault.connect(user).withdraw(0)).to.be.revertedWithCustomError(vault, "AmountIsZero");
+			await expect(vault.connect(user).withdraw(DEPOSIT_AMOUNT + 1n)).to.be.revertedWithCustomError(
+				vault,
+				"InsufficientBalance"
+			);
+		});
+
+		it("Should revert if the receiver does not accept ETH", async function () {
+			const MockReceiverFactory = await ethers.getContractFactory("MockReceiver");
+			const receiver = await MockReceiverFactory.deploy();
+			await receiver.waitForDeployment();
+
+			await receiver.deposit(proxy.target, { value: DEPOSIT_AMOUNT });
+
+			await expect(receiver.withdraw(proxy.target, DEPOSIT_AMOUNT)).to.be.revertedWithCustomError(
+				vault,
+				"TransferFailed"
+			);
+		});
+
+		it("Should prevent initialize twice", async function () {
+			await expect(vault.connect(user).initialize(user.address)).to.be.revertedWithCustomError(
+				vault,
+				"InvalidInitialization"
+			);
+			await expect(vaultV1.initialize(user.address)).to.be.revertedWithCustomError(vaultV1, "InvalidInitialization");
+		});
+
+		it("Should prevent initialize with zero owner", async function () {
+			const ProxyFactory = await ethers.getContractFactory("Proxy");
+			const newProxy = await ProxyFactory.deploy(vaultV1.target, admin.address, "0x");
+			await newProxy.waitForDeployment();
+
+			const newVault = await ethers.getContractAt("VaultV1", newProxy.target);
+
+			await expect(newVault.initialize(ethers.ZeroAddress)).to.be.revertedWithCustomError(
+				newVault,
+				"OwnerIsZeroAddress"
+			);
+		});
+
+		it("Should prevent send ETH to the proxy without deposit", async function () {
+			await expect(user.sendTransaction({ to: proxy.target, value: DEPOSIT_AMOUNT })).to.be.reverted;
+		});
 	});
 
 	describe("Upgrade", function () {
@@ -91,6 +157,14 @@ describe("Proxy", function () {
 			await expect(proxy.connect(user).upgradeTo(newVaultV1.target)).to.be.revertedWithCustomError(
 				proxy,
 				"OnlyAdminAllowed"
+			);
+		});
+
+		it("Should prevent upgrade to non-contract address", async function () {
+			await expect(proxy.upgradeTo(user.address)).to.be.revertedWithCustomError(proxy, "ImplementationIsNotContract");
+			await expect(proxy.upgradeTo(ethers.ZeroAddress)).to.be.revertedWithCustomError(
+				proxy,
+				"ImplementationIsNotContract"
 			);
 		});
 
@@ -114,6 +188,10 @@ describe("Proxy", function () {
 				proxy,
 				"OnlyAdminAllowed"
 			);
+		});
+
+		it("Should prevent change admin to zero address", async function () {
+			await expect(proxy.changeAdmin(ethers.ZeroAddress)).to.be.revertedWithCustomError(proxy, "AdminIsZeroAddress");
 		});
 	});
 
